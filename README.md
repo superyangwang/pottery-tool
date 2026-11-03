@@ -1,7 +1,8 @@
 # Pottery Tool
 
 Two browser tools for turning a silhouette image into a printable STL, in one
-tabbed app:
+tabbed app. Live at https://superyangwang.github.io/pottery-tool/ (redeploys
+from `main` through GitHub Actions):
 
 - **Dish Plate Generator** - the silhouette extruded to a uniform thickness
   with a circular dish cavity recessed into the top surface. The cavity is
