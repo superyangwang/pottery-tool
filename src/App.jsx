@@ -30,8 +30,9 @@ const RIB_DEFAULTS = {
   bottomShape: 'none',   // 'none' | 'foot'
   footHeight: 0.4,       // foot rail height up the rib
   footBottomWidth: 0.5,  // foot rail thickness (the surface it stands on)
+  keepHoles: true,       // keep enclosed holes (thumb hole) open
   threshold: 0.3,
-  smoothIterations: 1,
+  smoothIterations: 3,   // ribs are mostly long curves: smooth hard by default
 };
 
 function buildPlate(imageData, p) {
@@ -50,7 +51,7 @@ function buildPlate(imageData, p) {
 
 function buildRib(imageData, p) {
   const toMm = p.unit === 'in' ? IN_TO_MM : 1;
-  const sil = buildSilhouette(imageData, { threshold: p.threshold });
+  const sil = buildSilhouette(imageData, { threshold: p.threshold, keepHoles: p.keepHoles });
   return buildRibGeometry(sil, {
     footWidthMm: p.footWidth * toMm,
     thicknessMm: p.thickness * toMm,

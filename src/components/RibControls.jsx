@@ -66,7 +66,8 @@ export default function RibControls({
         </label>
         <p className="hint">
           Draw or photograph the rib outline with the working (bottom) edge at
-          the bottom of the image. Outlines or filled silhouettes both work.
+          the bottom of the image. Outlines or filled silhouettes both work;
+          an enclosed thumb hole is kept open and bevelled like the edge.
         </p>
       </section>
 
@@ -172,8 +173,9 @@ export default function RibControls({
             <p className="hint">
               Adds a thicker rail along the bottom edge: it reaches the foot
               height up the rib and is the foot bottom width thick, centred on
-              the rib so it stands proud of both faces. Must be wider than the
-              rib thickness.
+              the rib so it stands proud of both faces. The rail is square
+              edged; the edge angle does not apply to it. Must be wider than
+              the rib thickness.
             </p>
           </>
         )}
@@ -203,6 +205,30 @@ export default function RibControls({
             onChange={(e) => update({ smoothIterations: Number(e.target.value) })}
           />
         </label>
+        <div className="shape-toggle" style={{ marginTop: 10 }} role="radiogroup">
+          <label className={`shape-opt ${params.keepHoles ? 'active' : ''}`}>
+            <input
+              type="radio"
+              name="rib-holes"
+              checked={!!params.keepHoles}
+              onChange={() => update({ keepHoles: true })}
+            />
+            Keep holes
+          </label>
+          <label className={`shape-opt ${params.keepHoles ? '' : 'active'}`}>
+            <input
+              type="radio"
+              name="rib-holes"
+              checked={!params.keepHoles}
+              onChange={() => update({ keepHoles: false })}
+            />
+            Fill holes
+          </label>
+        </div>
+        <p className="hint">
+          Keep holes leaves enclosed openings (a thumb hole) in the rib. Fill
+          holes makes the whole silhouette solid.
+        </p>
       </section>
 
       {info && (
@@ -214,6 +240,7 @@ export default function RibControls({
               <tr><td>Bottom foot width</td><td>{show(info.footWidthMm)}</td></tr>
               <tr><td>Thickness</td><td>{show(info.thicknessMm)}</td></tr>
               <tr><td>Edge bevel</td><td>{info.edgeAngleDeg}° ({show(info.bevelInsetMm)} inset)</td></tr>
+              <tr><td>Holes</td><td>{info.holes}</td></tr>
               {info.foot && (
                 <tr><td>Foot rail</td><td>{show(info.foot.heightMm)} tall, {show(info.foot.bottomWidthMm)} wide</td></tr>
               )}

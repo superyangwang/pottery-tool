@@ -65,7 +65,19 @@ export function downsampleGray(gray, width, height, maxSide) {
  * @returns {{ W: number, H: number, mask: Uint8Array }}
  */
 export function buildSilhouette(img, opts = {}) {
-  const { threshold = 0.3, maxResolution = 512 } = opts;
+  const {
+    threshold = 0.3,
+    maxResolution = 512,
+    // Holes: by default every enclosed light region is filled (outline
+    // drawings become solid). With keepHoles, enclosed regions whose area is
+    // between minHoleFraction and maxHoleFraction of the filled silhouette
+    // stay open - a thumb hole in a photographed rib - while the big interior
+    // of a line drawing (> maxHoleFraction) and specks (< minHoleFraction)
+    // are still filled.
+    keepHoles = false,
+    minHoleFraction = 0.002,
+    maxHoleFraction = 0.5,
+  } = opts;
   const full = grayscaleFromRGBA(img.data, img.width, img.height);
   const { gray, width: W, height: H } = downsampleGray(full, img.width, img.height, maxResolution);
 
@@ -103,6 +115,41 @@ export function buildSilhouette(img, opts = {}) {
 
   const mask = new Uint8Array(W * H);
   for (let i = 0; i < W * H; i++) mask[i] = exterior[i] ? 0 : 1;
+
+  if (keepHoles) {
+    let filledArea = 0;
+    for (let i = 0; i < W * H; i++) filledArea += mask[i];
+    const minArea = filledArea * minHoleFraction;
+    const maxArea = filledArea * maxHoleFraction;
+    // Label enclosed non-ink components (4-connected) and open the ones in range.
+    const seen = new Uint8Array(W * H);
+    const comp = new Int32Array(W * H);
+    for (let start = 0; start < W * H; start++) {
+      if (seen[start] || ink[start] || exterior[start]) continue;
+      let head = 0;
+      let tail = 0;
+      comp[tail++] = start;
+      seen[start] = 1;
+      while (head < tail) {
+        const idx = comp[head++];
+        const x = idx % W;
+        const y = (idx / W) | 0;
+        const tryPush = (n) => {
+          if (!seen[n] && !ink[n] && !exterior[n]) {
+            seen[n] = 1;
+            comp[tail++] = n;
+          }
+        };
+        if (x > 0) tryPush(idx - 1);
+        if (x < W - 1) tryPush(idx + 1);
+        if (y > 0) tryPush(idx - W);
+        if (y < H - 1) tryPush(idx + W);
+      }
+      if (tail > minArea && tail < maxArea) {
+        for (let k = 0; k < tail; k++) mask[comp[k]] = 0;
+      }
+    }
+  }
 
   // Guarantee a clear 1-pixel border so contours always close.
   for (let x = 0; x < W; x++) {

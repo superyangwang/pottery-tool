@@ -35,9 +35,20 @@ drawn with its working edge at the bottom of the image, then set:
 - *Inside edge angle* (default 45°) - the top-face contour is offset inward
   by thickness × tan(angle) and lofted to the bottom outline, giving a
   bevelled working edge instead of a square cut. 0° = square.
-- *Bottom shape* - "None", or "Foot" to add a thickened rail along the bottom
-  edge with its own foot height (how far up the rib it reaches) and foot
-  bottom width (the rail's thickness, centred on the rib).
+- *Bottom shape* - "None", or "Foot" to add a square-edged thickened rail
+  along the bottom edge with its own foot height (how far up the rib it
+  reaches) and foot bottom width (the rail's thickness, centred on the rib).
+  The edge angle does not apply to the foot.
+- *Keep holes / Fill holes* - an enclosed opening such as a thumb hole is
+  kept by default and gets the same bevel as the outer edge (it widens
+  towards the top face). Specks and the big interior of a line drawing are
+  still filled.
+
+Outlines are traced at full resolution and smoothed with a Gaussian along the
+contour, so long curves come out smooth while sharp corners stay put. The
+bevel contour comes from an exact Euclidean erosion of the silhouette and is
+matched to the outer contour by nearest point, so the bevel wall is a clean
+strip even around corners and holes.
 
 The rib mesh lives in `src/rib/mesh.js` and reuses the plate's silhouette
 tracer and STL exporter.
