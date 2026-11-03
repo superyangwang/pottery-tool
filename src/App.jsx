@@ -1,15 +1,17 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useState } from 'react';
 import Controls from './components/Controls.jsx';
+import RibControls from './components/RibControls.jsx';
 import PlateViewer from './components/PlateViewer.jsx';
 import { buildSilhouette } from './plate/silhouette.js';
 import { buildPlateGeometry } from './plate/mesh.js';
-import { geometryToBinarySTL } from './plate/stl.js';
+import { buildRibGeometry } from './rib/mesh.js';
+import { useGenerator, fileToImageData } from './useGenerator.js';
 import './App.css';
 
 const IN_TO_MM = 25.4;
 
-const DEFAULTS = {
-  unit: 'in',            // 'in' | 'mm' — all dimension params below are in this unit
+const PLATE_DEFAULTS = {
+  unit: 'in',            // 'in' | 'mm' - all dimension params below are in this unit
   plateWidth: 6,         // overall silhouette width
   thickness: 1,          // plate thickness (1 inch default)
   cavityMargin: 0.75,    // distance from cavity rim to silhouette edge
@@ -20,163 +22,145 @@ const DEFAULTS = {
   smoothIterations: 1,   // Chaikin passes on the traced outline
 };
 
-async function fileToImageData(source) {
-  const url = typeof source === 'string' ? source : URL.createObjectURL(source);
-  try {
-    const img = new Image();
-    img.src = url;
-    await img.decode();
-    const maxIn = 1024;
-    const scale = Math.min(1, maxIn / Math.max(img.naturalWidth, img.naturalHeight));
-    const w = Math.max(2, Math.round(img.naturalWidth * scale));
-    const h = Math.max(2, Math.round(img.naturalHeight * scale));
-    const canvas = document.createElement('canvas');
-    canvas.width = w;
-    canvas.height = h;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(img, 0, 0, w, h);
-    return ctx.getImageData(0, 0, w, h);
-  } finally {
-    if (typeof source !== 'string') URL.revokeObjectURL(url);
-  }
+const RIB_DEFAULTS = {
+  unit: 'in',
+  footWidth: 4,          // widest span across the bottom edge
+  thickness: 0.2,        // rib thickness
+  edgeAngle: 45,         // bevel angle on the working edge, degrees from vertical
+  bottomShape: 'none',   // 'none' | 'foot'
+  footHeight: 0.4,       // foot rail height up the rib
+  footBottomWidth: 0.5,  // foot rail thickness (the surface it stands on)
+  threshold: 0.3,
+  smoothIterations: 1,
+};
+
+function buildPlate(imageData, p) {
+  const toMm = p.unit === 'in' ? IN_TO_MM : 1;
+  const sil = buildSilhouette(imageData, { threshold: p.threshold });
+  return buildPlateGeometry(sil, {
+    plateWidthMm: p.plateWidth * toMm,
+    thicknessMm: p.thickness * toMm,
+    cavityMarginMm: p.cavityMargin * toMm,
+    cavityDepthMm: p.cavityDepth * toMm,
+    cavityProfile: p.cavityProfile,
+    cutGapMm: p.cutGap * toMm,
+    smoothIterations: p.smoothIterations,
+  });
 }
 
+function buildRib(imageData, p) {
+  const toMm = p.unit === 'in' ? IN_TO_MM : 1;
+  const sil = buildSilhouette(imageData, { threshold: p.threshold });
+  return buildRibGeometry(sil, {
+    footWidthMm: p.footWidth * toMm,
+    thicknessMm: p.thickness * toMm,
+    edgeAngleDeg: p.edgeAngle,
+    bottomShape: p.bottomShape,
+    footHeightMm: p.footHeight * toMm,
+    footBottomWidthMm: p.footBottomWidth * toMm,
+    smoothIterations: p.smoothIterations,
+  });
+}
+
+const loadPlateImage = () => fileToImageData(import.meta.env.BASE_URL + 'cat_plate_mold.png');
+
+// Default rib: a D-shaped kidney rib with a flat bottom, drawn on a canvas so
+// the tab opens with something to look at.
+async function loadDefaultRibImage() {
+  const w = 512;
+  const h = 400;
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, w, h);
+  ctx.fillStyle = '#000';
+  ctx.beginPath();
+  ctx.moveTo(60, 330);
+  ctx.lineTo(452, 330);
+  ctx.bezierCurveTo(470, 330, 480, 310, 470, 290);
+  ctx.bezierCurveTo(430, 180, 330, 80, 256, 70);
+  ctx.bezierCurveTo(180, 80, 80, 180, 42, 290);
+  ctx.bezierCurveTo(32, 310, 42, 330, 60, 330);
+  ctx.closePath();
+  ctx.fill();
+  return ctx.getImageData(0, 0, w, h);
+}
+
+const TABS = [
+  { id: 'plate', label: 'Dish Plate Generator' },
+  { id: 'rib', label: 'Pottery Rib Tool' },
+];
+
 export default function App() {
-  const [params, setParams] = useState(DEFAULTS);
-  const [imageData, setImageData] = useState(null);
-  const [fileName, setFileName] = useState('cat_plate_mold');
-  const [busy, setBusy] = useState(false);
-  const [stlBuffer, setStlBuffer] = useState(null);
-  const [error, setError] = useState(null);
+  const [tab, setTab] = useState('plate');
 
-  // Load the bundled cat-plate image on startup so the app opens ready to go.
-  useEffect(() => {
-    let cancelled = false;
-    fileToImageData(import.meta.env.BASE_URL + 'cat_plate_mold.png')
-      .then((data) => {
-        if (!cancelled) setImageData(data);
-      })
-      .catch(() => {}); // fine — user can upload manually
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  // One generator per tab; both live for the whole session so switching
+  // tabs keeps each tool's image, settings and generated STL.
+  const plate = useGenerator({
+    defaults: PLATE_DEFAULTS,
+    build: buildPlate,
+    loadInitialImage: loadPlateImage,
+    initialName: 'cat_plate_mold',
+  });
+  const rib = useGenerator({
+    defaults: RIB_DEFAULTS,
+    build: buildRib,
+    loadInitialImage: loadDefaultRibImage,
+    initialName: 'rib',
+    suffix: '_rib',
+  });
 
-  // Debounce param changes so dragging a slider doesn't rebuild every pixel.
-  const [debouncedParams, setDebouncedParams] = useState(params);
-  const debounceRef = useRef(0);
-  useEffect(() => {
-    clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => setDebouncedParams(params), 120);
-    return () => clearTimeout(debounceRef.current);
-  }, [params]);
-
-  // Any change to inputs invalidates the cached STL.
-  useEffect(() => {
-    setStlBuffer(null);
-  }, [imageData, debouncedParams]);
-
-  const built = useMemo(() => {
-    if (!imageData) return null;
-    try {
-      const p = debouncedParams;
-      const toMm = p.unit === 'in' ? IN_TO_MM : 1;
-      const sil = buildSilhouette(imageData, { threshold: p.threshold });
-      const result = buildPlateGeometry(sil, {
-        plateWidthMm: p.plateWidth * toMm,
-        thicknessMm: p.thickness * toMm,
-        cavityMarginMm: p.cavityMargin * toMm,
-        cavityDepthMm: p.cavityDepth * toMm,
-        cavityProfile: p.cavityProfile,
-        cutGapMm: p.cutGap * toMm,
-        smoothIterations: p.smoothIterations,
-      });
-      setError(null);
-      return result;
-    } catch (err) {
-      console.error('Plate build failed', err);
-      setError(err.message || String(err));
-      return null;
-    }
-  }, [imageData, debouncedParams]);
-
-  const geometry = built?.geometry ?? null;
-  const info = built?.info ?? null;
-
-  // Dispose old geometries — three.js holds GPU buffers.
-  const lastGeom = useRef(null);
-  useEffect(() => {
-    if (lastGeom.current && lastGeom.current !== geometry) {
-      lastGeom.current.dispose();
-    }
-    lastGeom.current = geometry;
-  }, [geometry]);
-
-  const handleUpload = async (file) => {
-    setBusy(true);
-    try {
-      const data = await fileToImageData(file);
-      setImageData(data);
-      setFileName(file.name.replace(/\.[^.]+$/, ''));
-    } catch (err) {
-      console.error(err);
-      alert('Could not decode that image.');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const handleGenerate = () => {
-    if (!geometry) return;
-    setBusy(true);
-    try {
-      setStlBuffer(geometryToBinarySTL(geometry));
-    } catch (err) {
-      console.error(err);
-      setError(err.message || String(err));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const handleDownload = () => {
-    if (!stlBuffer) return;
-    const blob = new Blob([stlBuffer], { type: 'model/stl' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = (fileName || 'plate') + '.stl';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
+  const active = tab === 'plate' ? plate : rib;
+  const ControlsView = tab === 'plate' ? Controls : RibControls;
+  const emptyHint =
+    tab === 'plate'
+      ? 'Upload a silhouette image to see your plate here.'
+      : 'Upload a rib outline to see your rib here.';
 
   return (
     <div className="app">
-      <Controls
-        params={params}
-        setParams={setParams}
-        info={info}
-        onUpload={handleUpload}
-        onGenerate={handleGenerate}
-        onDownload={handleDownload}
-        hasImage={!!imageData}
-        hasGeometry={!!geometry}
-        hasStl={!!stlBuffer}
-        busy={busy}
-        error={error}
-      />
-      <PlateViewer
-        geometry={geometry}
-        placeholder={
-          imageData
-            ? error
-              ? `Build failed: ${error}`
-              : 'Building preview…'
-            : 'Upload a silhouette image to see your plate here.'
-        }
-      />
+      <nav className="tabs" role="tablist">
+        {TABS.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            role="tab"
+            aria-selected={tab === t.id}
+            className={`tab ${tab === t.id ? 'active' : ''}`}
+            onClick={() => setTab(t.id)}
+          >
+            {t.label}
+          </button>
+        ))}
+      </nav>
+      <div className="workspace">
+        <ControlsView
+          params={active.params}
+          setParams={active.setParams}
+          info={active.info}
+          onUpload={active.handleUpload}
+          onGenerate={active.handleGenerate}
+          onDownload={active.handleDownload}
+          hasImage={!!active.imageData}
+          hasGeometry={!!active.geometry}
+          hasStl={!!active.stlBuffer}
+          busy={active.busy}
+          error={active.error}
+        />
+        <PlateViewer
+          key={tab}
+          geometry={active.geometry}
+          placeholder={
+            active.imageData
+              ? active.error
+                ? `Build failed: ${active.error}`
+                : 'Building preview…'
+              : emptyHint
+          }
+        />
+      </div>
     </div>
   );
 }

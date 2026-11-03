@@ -1,10 +1,14 @@
-# Dish Plate Generator
+# Pottery Tool
 
-Turns a silhouette image (e.g. `cat_plate mold.png`) into a solid, printable
-STL: the silhouette extruded to a uniform thickness with a circular dish
-cavity recessed into the top surface. The cavity is auto-placed at the center
-of the largest circle that fits inside the silhouette, and its rim keeps a
-configurable distance from the silhouette edge.
+Two browser tools for turning a silhouette image into a printable STL, in one
+tabbed app:
+
+- **Dish Plate Generator** - the silhouette extruded to a uniform thickness
+  with a circular dish cavity recessed into the top surface. The cavity is
+  auto-placed at the center of the largest circle that fits inside the
+  silhouette, and its rim keeps a configurable distance from the edge.
+- **Pottery Rib Tool** - the silhouette becomes a flat rib with a bevelled
+  working edge and an optional foot rail along the bottom edge.
 
 ## Web UI
 
@@ -13,12 +17,30 @@ npm install
 npm run dev
 ```
 
-Opens with the cat-plate image preloaded. Adjust plate width/thickness
-(1 inch default), cavity edge distance, depth, and profile (curved bowl,
-flat floor, or foam press — the plate stays solid and a smaller copy of the
-silhouette is cut clean through it, keeping both the outer frame and the
-center piece with a small clearance gap), then Generate + Download STL. Interface mirrors the
-`3dPrinting stamp` project.
+Pick a tab at the top; each tab keeps its own image, settings and STL.
+
+**Dish Plate Generator** opens with the cat-plate image preloaded. Adjust
+plate width/thickness (1 inch default), cavity edge distance, depth, and
+profile (curved bowl, flat floor, or foam press — the plate stays solid and a
+smaller copy of the silhouette is cut clean through it, keeping both the
+outer frame and the center piece with a small clearance gap), then Generate
++ Download STL. Interface mirrors the `3dPrinting stamp` project.
+
+**Pottery Rib Tool** opens with a default D-shaped rib. Upload a rib outline
+drawn with its working edge at the bottom of the image, then set:
+
+- *Bottom foot width* - the outline is scaled so its widest span along the
+  bottom edge equals this; every other dimension follows that scale.
+- *Thickness* - rib thickness.
+- *Inside edge angle* (default 45°) - the top-face contour is offset inward
+  by thickness × tan(angle) and lofted to the bottom outline, giving a
+  bevelled working edge instead of a square cut. 0° = square.
+- *Bottom shape* - "None", or "Foot" to add a thickened rail along the bottom
+  edge with its own foot height (how far up the rib it reaches) and foot
+  bottom width (the rail's thickness, centred on the rib).
+
+The rib mesh lives in `src/rib/mesh.js` and reuses the plate's silhouette
+tracer and STL exporter.
 
 ## CLI
 
