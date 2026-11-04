@@ -1,4 +1,43 @@
+import { useEffect, useRef } from 'react';
+
 const IN_TO_MM = 25.4;
+
+// Thumbnail of the detected shapes: every shape found is drawn dim, the one
+// used for the rib bright. Clicking a shape picks it.
+function MaskPreview({ silhouette, onPick }) {
+  const ref = useRef();
+  useEffect(() => {
+    const canvas = ref.current;
+    if (!canvas || !silhouette) return;
+    const { W, H, mask, allMask } = silhouette;
+    canvas.width = W;
+    canvas.height = H;
+    const ctx = canvas.getContext('2d');
+    const img = ctx.createImageData(W, H);
+    for (let i = 0; i < W * H; i++) {
+      const used = mask[i];
+      const found = allMask ? allMask[i] : used;
+      img.data[i * 4] = used ? 232 : found ? 88 : 21;
+      img.data[i * 4 + 1] = used ? 222 : found ? 90 : 23;
+      img.data[i * 4 + 2] = used ? 204 : found ? 96 : 26;
+      img.data[i * 4 + 3] = 255;
+    }
+    ctx.putImageData(img, 0, 0);
+  }, [silhouette]);
+  if (!silhouette) return null;
+  return (
+    <canvas
+      ref={ref}
+      className="mask-preview"
+      aria-label="Detected shapes - click one to use it"
+      title="Click a shape to use it as the rib"
+      onClick={(e) => {
+        const r = e.currentTarget.getBoundingClientRect();
+        onPick([(e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height]);
+      }}
+    />
+  );
+}
 
 export default function RibControls({
   params,
@@ -12,8 +51,13 @@ export default function RibControls({
   hasStl,
   busy,
   error,
+  pot,
+  view = 'rib',
+  setView = () => {},
 }) {
   const update = (patch) => setParams({ ...params, ...patch });
+  const isAuto = params.detect !== 'ink';
+  const showingPot = view === 'pot';
   const isInch = params.unit === 'in';
   const unitLabel = isInch ? 'in' : 'mm';
   const step = isInch ? 0.05 : 1;
@@ -30,6 +74,7 @@ export default function RibControls({
       thickness: cv(params.thickness),
       footHeight: cv(params.footHeight),
       footBottomWidth: cv(params.footBottomWidth),
+      potBottomDiameter: cv(params.potBottomDiameter),
     });
   };
 
@@ -60,15 +105,37 @@ export default function RibControls({
             accept="image/png,image/jpeg,image/svg+xml,image/webp"
             onChange={(e) => {
               const f = e.target.files?.[0];
-              if (f) onUpload(f);
+              if (f) {
+                update({ pick: null }); // a new image gets a fresh automatic choice
+                onUpload(f);
+              }
             }}
           />
         </label>
         <p className="hint">
-          Draw or photograph the rib outline with the working (bottom) edge at
-          the bottom of the image. Outlines or filled silhouettes both work;
-          an enclosed thumb hole is kept open and bevelled like the edge.
+          Draw or photograph the rib with its foot (bottom) edge at the bottom
+          of the image. Photos on any background work: the rib is picked out
+          automatically. Outlines or filled silhouettes work too, and an
+          enclosed thumb hole is kept open and bevelled like the edge.
         </p>
+        <MaskPreview silhouette={info?.silhouette} onPick={(pick) => update({ pick })} />
+        {info?.silhouette && (
+          <p className="hint">
+            {info.silhouette.shapes > 1
+              ? `${info.silhouette.shapes} shapes found. The bright one is used` +
+                (params.pick ? ' (your pick).' : ': the flattest-shaded one, which is usually the rib, not the pot.') +
+                ' Click another shape in the thumbnail to use it instead.'
+              : 'The bright shape is what becomes the rib.'}
+            {params.pick && (
+              <>
+                {' '}
+                <a href="#auto" onClick={(e) => { e.preventDefault(); update({ pick: null }); }}>
+                  Back to automatic choice
+                </a>
+              </>
+            )}
+          </p>
+        )}
       </section>
 
       <section>
@@ -183,17 +250,65 @@ export default function RibControls({
 
       <section>
         <h3>Outline</h3>
-        <label>
-          Line sensitivity: {params.threshold.toFixed(2)}
-          <input
-            type="range"
-            min={0.1}
-            max={0.7}
-            step={0.01}
-            value={params.threshold}
-            onChange={(e) => update({ threshold: Number(e.target.value) })}
-          />
-        </label>
+        <div className="shape-toggle" role="radiogroup">
+          <label className={`shape-opt ${isAuto ? 'active' : ''}`}>
+            <input
+              type="radio"
+              name="rib-detect"
+              checked={isAuto}
+              onChange={() => update({ detect: 'auto' })}
+            />
+            Auto detect
+          </label>
+          <label className={`shape-opt ${isAuto ? '' : 'active'}`}>
+            <input
+              type="radio"
+              name="rib-detect"
+              checked={!isAuto}
+              onChange={() => update({ detect: 'ink' })}
+            />
+            Dark lines
+          </label>
+        </div>
+        {isAuto ? (
+          <>
+            <label style={{ marginTop: 10 }}>
+              Detection strictness: {params.autoBias.toFixed(2)}
+              <input
+                type="range"
+                min={0.5}
+                max={1.6}
+                step={0.05}
+                value={params.autoBias}
+                onChange={(e) => update({ autoBias: Number(e.target.value) })}
+              />
+            </label>
+            <p className="hint">
+              Auto detect reads the background colour from the image border and
+              keeps whatever differs from it, then drops specks and keeps the
+              biggest shape. Raise strictness if a shadow or the table gets
+              included; lower it if part of the rib is missed.
+            </p>
+          </>
+        ) : (
+          <>
+            <label style={{ marginTop: 10 }}>
+              Line sensitivity: {params.threshold.toFixed(2)}
+              <input
+                type="range"
+                min={0.1}
+                max={0.7}
+                step={0.01}
+                value={params.threshold}
+                onChange={(e) => update({ threshold: Number(e.target.value) })}
+              />
+            </label>
+            <p className="hint">
+              Dark lines treats dark pixels as the rib - for black-on-white
+              drawings.
+            </p>
+          </>
+        )}
         <label style={{ marginTop: 10 }}>
           Edge smoothing: {params.smoothIterations}
           <input
@@ -229,6 +344,51 @@ export default function RibControls({
           Keep holes leaves enclosed openings (a thumb hole) in the rib. Fill
           holes makes the whole silhouette solid.
         </p>
+      </section>
+
+      <section>
+        <h3>Thrown pot preview</h3>
+        <div className="row">
+          <label>
+            Bottom diameter ({unitLabel}){' '}
+            {dim('potBottomDiameter', { min: isInch ? 0.1 : 2, step: isInch ? 0.1 : 1 })}
+          </label>
+        </div>
+        <div className="shape-toggle" style={{ marginTop: 10 }} role="radiogroup">
+          {['auto', 'left', 'right'].map((opt) => (
+            <label key={opt} className={`shape-opt ${params.potSide === opt ? 'active' : ''}`}>
+              <input
+                type="radio"
+                name="rib-pot-side"
+                checked={params.potSide === opt}
+                onChange={() => update({ potSide: opt })}
+              />
+              {opt === 'auto' ? 'Auto edge' : opt === 'left' ? 'Left edge' : 'Right edge'}
+            </label>
+          ))}
+        </div>
+        <p className="hint">
+          Stand the rib on its foot against the wall of a pot: the chosen side
+          edge becomes the wall profile. The pot is as tall as the rib
+          {info ? ` (${show(info.heightMm)})` : ''} and starts from the bottom
+          diameter you enter. Auto picks the more curved edge.
+          {pot?.info
+            ? ` Using the ${pot.info.side} edge: rim ${show(pot.info.rimDiameterMm)}, widest ${show(pot.info.maxDiameterMm)}.`
+            : ''}
+        </p>
+        {pot?.error && <p className="error">{pot.error}</p>}
+        <button
+          type="button"
+          className={showingPot ? 'primary' : 'secondary'}
+          style={{ width: '100%', marginTop: 8 }}
+          onClick={() => setView(showingPot ? 'rib' : 'pot')}
+          disabled={!hasGeometry || (!showingPot && !pot?.geometry)}
+        >
+          {showingPot ? 'Back to rib' : 'Preview pot'}
+        </button>
+        {showingPot && (
+          <p className="hint">The STL buttons below still export the rib, not the pot.</p>
+        )}
       </section>
 
       {info && (

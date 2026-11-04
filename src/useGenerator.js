@@ -81,6 +81,8 @@ export function useGenerator({ defaults, build, loadInitialImage, initialName, s
 
   const geometry = built.result?.geometry ?? null;
   const info = built.result?.info ?? null;
+  // Optional companion build (the rib tab's pot preview): { geometry, info } or { error }.
+  const pot = built.result?.pot ?? null;
   const [actionError, setActionError] = useState(null);
   const error = built.error ?? actionError;
 
@@ -92,6 +94,14 @@ export function useGenerator({ defaults, build, loadInitialImage, initialName, s
     }
     lastGeom.current = geometry;
   }, [geometry]);
+  const potGeometry = pot?.geometry ?? null;
+  const lastPot = useRef(null);
+  useEffect(() => {
+    if (lastPot.current && lastPot.current !== potGeometry) {
+      lastPot.current.dispose();
+    }
+    lastPot.current = potGeometry;
+  }, [potGeometry]);
 
   const handleUpload = async (file) => {
     setBusy(true);
@@ -141,6 +151,7 @@ export function useGenerator({ defaults, build, loadInitialImage, initialName, s
     imageData,
     geometry,
     info,
+    pot,
     error,
     busy,
     stlBuffer,

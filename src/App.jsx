@@ -5,6 +5,7 @@ import PlateViewer from './components/PlateViewer.jsx';
 import { buildSilhouette } from './plate/silhouette.js';
 import { buildPlateGeometry } from './plate/mesh.js';
 import { buildRibGeometry } from './rib/mesh.js';
+import { buildPotGeometry } from './rib/pot.js';
 import { useGenerator, fileToImageData } from './useGenerator.js';
 import './App.css';
 
@@ -31,8 +32,13 @@ const RIB_DEFAULTS = {
   footHeight: 0.4,       // foot rail height up the rib
   footBottomWidth: 0.5,  // foot rail thickness (the surface it stands on)
   keepHoles: true,       // keep enclosed holes (thumb hole) open
-  threshold: 0.3,
+  detect: 'auto',        // 'auto' = pick the rib out of a photo; 'ink' = dark-line threshold
+  autoBias: 1,           // auto cut-off multiplier (> 1 stricter)
+  pick: null,            // [x, y] 0..1 - shape clicked in the thumbnail, or null = auto
+  threshold: 0.3,        // ink mode line sensitivity
   smoothIterations: 3,   // ribs are mostly long curves: smooth hard by default
+  potBottomDiameter: 3,  // thrown-pot preview: base diameter
+  potSide: 'auto',       // which rib edge is the pot's wall profile
 };
 
 function buildPlate(imageData, p) {
@@ -51,8 +57,15 @@ function buildPlate(imageData, p) {
 
 function buildRib(imageData, p) {
   const toMm = p.unit === 'in' ? IN_TO_MM : 1;
-  const sil = buildSilhouette(imageData, { threshold: p.threshold, keepHoles: p.keepHoles });
-  return buildRibGeometry(sil, {
+  const sil = buildSilhouette(imageData, {
+    threshold: p.threshold,
+    keepHoles: p.keepHoles,
+    detect: p.detect,
+    autoBias: p.autoBias,
+    selectShape: true,
+    pick: p.pick,
+  });
+  const rib = buildRibGeometry(sil, {
     footWidthMm: p.footWidth * toMm,
     thicknessMm: p.thickness * toMm,
     edgeAngleDeg: p.edgeAngle,
@@ -61,6 +74,22 @@ function buildRib(imageData, p) {
     footBottomWidthMm: p.footBottomWidth * toMm,
     smoothIterations: p.smoothIterations,
   });
+  // The pot preview is a companion build: a problem with it (e.g. a zero
+  // diameter) must not take the rib down with it.
+  let pot;
+  try {
+    pot = buildPotGeometry(rib.info.outlineMm, rib.info.heightMm, {
+      bottomDiameterMm: p.potBottomDiameter * toMm,
+      side: p.potSide,
+    });
+  } catch (err) {
+    pot = { error: err.message || String(err) };
+  }
+  return {
+    geometry: rib.geometry,
+    info: { ...rib.info, silhouette: sil },
+    pot,
+  };
 }
 
 const loadPlateImage = () => fileToImageData(import.meta.env.BASE_URL + 'cat_plate_mold.png');
@@ -96,6 +125,8 @@ const TABS = [
 
 export default function App() {
   const [tab, setTab] = useState('plate');
+  // Rib tab viewer: the rib itself, or the pot it would throw.
+  const [ribView, setRibView] = useState('rib');
 
   // One generator per tab; both live for the whole session so switching
   // tabs keeps each tool's image, settings and generated STL.
@@ -115,10 +146,13 @@ export default function App() {
 
   const active = tab === 'plate' ? plate : rib;
   const ControlsView = tab === 'plate' ? Controls : RibControls;
+  const showPot = tab === 'rib' && ribView === 'pot';
   const emptyHint =
     tab === 'plate'
       ? 'Upload a silhouette image to see your plate here.'
-      : 'Upload a rib outline to see your rib here.';
+      : 'Upload a rib outline or photo to see your rib here.';
+  const viewGeometry = showPot ? rib.pot?.geometry ?? null : active.geometry;
+  const viewError = showPot ? rib.pot?.error ?? active.error : active.error;
 
   return (
     <div className="app">
@@ -149,14 +183,19 @@ export default function App() {
           hasStl={!!active.stlBuffer}
           busy={active.busy}
           error={active.error}
+          pot={rib.pot}
+          view={ribView}
+          setView={setRibView}
         />
         <PlateViewer
           key={tab}
-          geometry={active.geometry}
+          geometry={viewGeometry}
+          color={showPot ? '#b9795b' : '#d8c9b4'}
+          doubleSide={showPot}
           placeholder={
             active.imageData
-              ? active.error
-                ? `Build failed: ${active.error}`
+              ? viewError
+                ? `Build failed: ${viewError}`
                 : 'Building preview…'
               : emptyHint
           }

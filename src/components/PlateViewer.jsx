@@ -3,7 +3,7 @@ import { OrbitControls, Grid } from '@react-three/drei';
 import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 
-function Plate({ geometry }) {
+function Plate({ geometry, color, doubleSide }) {
   const ref = useRef();
   useEffect(() => {
     if (ref.current && geometry) {
@@ -13,12 +13,23 @@ function Plate({ geometry }) {
   if (!geometry) return null;
   return (
     <mesh ref={ref} castShadow receiveShadow>
-      <meshStandardMaterial color="#d8c9b4" roughness={0.65} metalness={0.05} />
+      <meshStandardMaterial
+        key={doubleSide ? 'double' : 'single'} // side is baked into the shader program
+        color={color}
+        roughness={0.65}
+        metalness={0.05}
+        side={doubleSide ? THREE.DoubleSide : THREE.FrontSide}
+      />
     </mesh>
   );
 }
 
-export default function PlateViewer({ geometry, placeholder }) {
+export default function PlateViewer({
+  geometry,
+  placeholder,
+  color = '#d8c9b4',
+  doubleSide = false,
+}) {
   return (
     <div className="viewer">
       <Canvas
@@ -54,7 +65,7 @@ export default function PlateViewer({ geometry, placeholder }) {
           position={[0, 0, -0.01]}
           rotation={[-Math.PI / 2, 0, 0]}
         />
-        <Plate geometry={geometry} />
+        <Plate geometry={geometry} color={color} doubleSide={doubleSide} />
         <OrbitControls makeDefault target={[0, 0, 12]} />
       </Canvas>
       {!geometry && <div className="placeholder">{placeholder}</div>}

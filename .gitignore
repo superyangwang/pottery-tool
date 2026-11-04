@@ -2,3 +2,8 @@ node_modules/
 dist/
 .DS_Store
 *.log
+
+# Local images (photos, screenshots, test inputs) stay out of the repo;
+# the preloaded sample the site needs is the one exception.
+*.png
+!public/cat_plate_mold.png

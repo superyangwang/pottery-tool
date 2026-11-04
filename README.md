@@ -28,7 +28,7 @@ outer frame and the center piece with a small clearance gap), then Generate
 + Download STL. Interface mirrors the `3dPrinting stamp` project.
 
 **Pottery Rib Tool** opens with a default D-shaped rib. Upload a rib outline
-drawn with its working edge at the bottom of the image, then set:
+or a photo of a rib, foot edge at the bottom of the image, then set:
 
 - *Bottom foot width* - the outline is scaled so its widest span along the
   bottom edge equals this; every other dimension follows that scale.
@@ -44,6 +44,21 @@ drawn with its working edge at the bottom of the image, then set:
   kept by default and gets the same bevel as the outer edge (it widens
   towards the top face). Specks and the big interior of a line drawing are
   still filled.
+- *Auto detect / Dark lines* - auto detect (default) picks the rib out of a
+  photo on any background: the background colour is the median of the image
+  border, every pixel's colour distance from it is thresholded with Otsu's
+  method, and a small morphological opening drops specks and shadow slivers.
+  When several shapes are in frame (the rib next to the bowl it throws) the
+  one with the flattest shading is used - a rib is a flat plate of one
+  colour, a bowl is shaded across its curves - and the thumbnail under the
+  upload button shows every shape found with the chosen one bright; click a
+  different shape to use it instead. A strictness slider scales the cut-off.
+  Dark lines is the plain darkness threshold for black-on-white drawings.
+- *Thrown pot preview* - type the base diameter of the pot and press
+  *Preview pot*: the rib is stood upright on its foot and its side edge (auto
+  = the more curved one, or pick left/right) is revolved into a hollow pot of
+  the same height as the rib, starting from that base diameter. *Back to rib*
+  returns to the rib; the STL buttons always export the rib.
 
 Outlines are traced at full resolution and smoothed with a Gaussian along the
 contour, so long curves come out smooth while sharp corners stay put. The
@@ -52,7 +67,7 @@ matched to the outer contour by nearest point, so the bevel wall is a clean
 strip even around corners and holes.
 
 The rib mesh lives in `src/rib/mesh.js` and reuses the plate's silhouette
-tracer and STL exporter.
+tracer and STL exporter; the pot preview is `src/rib/pot.js`.
 
 ## CLI
 

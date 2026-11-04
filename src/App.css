@@ -286,3 +286,15 @@
   font-size: 14px;
   pointer-events: none;
 }
+
+/* Rib tab: thumbnail of the shape picked out of the uploaded image. */
+.mask-preview {
+  display: block;
+  width: 100%;
+  height: auto;
+  cursor: pointer;
+  margin-top: 8px;
+  border: 1px solid #2e3136;
+  border-radius: 6px;
+  background: #15171a;
+}

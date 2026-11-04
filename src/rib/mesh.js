@@ -236,6 +236,9 @@ export function buildRibGeometry(sil, opts) {
       holes: holes.length,
       foot,
       triangles: merged.getAttribute('position').count / 3,
+      // Outer loop in mm with the bottom edge at y = 0 (before the viewer
+      // re-centring) - the pot preview reads its wall profile from this.
+      outlineMm: outer,
     },
   };
 }
