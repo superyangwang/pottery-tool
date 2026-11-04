@@ -17,6 +17,10 @@
 import * as THREE from 'three';
 
 const MIN_RADIUS_MM = 0.3;
+// The base radius is pinned to the edge this far up the rib (fraction of its
+// height), not to the very bottom row: a rounded corner, a slight tilt or a
+// speck on the bottom edge would otherwise shift the whole profile.
+const BASE_FRACTION = 0.03;
 
 /**
  * @param {Array<[number, number]>} outlineMm  rib outer loop in mm, bottom edge at y = 0
@@ -66,13 +70,21 @@ export function buildPotGeometry(outlineMm, heightMm, opts) {
   // shaped working edge; a straight back edge barely deviates at all.
   const chosen = side === 'auto' ? (deviation(right) > deviation(left) ? 'right' : 'left') : side;
   const xs = chosen === 'left' ? left : right;
-  const sign = chosen === 'left' ? -1 : 1;
+  // The pot sits on the chosen side of the rib, so its axis is further out
+  // that way. Left edge: the edge moving left (towards the axis) means a
+  // smaller radius, moving right a bigger one. Mirror for the right edge.
+  const sign = chosen === 'left' ? 1 : -1;
+
+  let kRef = 0;
+  while (kRef < samples - 1 && ys[kRef] < heightMm * BASE_FRACTION) kRef++;
+  const xRef = xs[kRef];
 
   const R0 = bottomDiameterMm / 2;
   const radius = new Float64Array(samples);
   let maxR = 0;
   for (let k = 0; k < samples; k++) {
-    radius[k] = Math.max(MIN_RADIUS_MM, R0 + sign * (xs[k] - xs[0]));
+    const x = k < kRef ? xRef : xs[k];
+    radius[k] = Math.max(MIN_RADIUS_MM, R0 + sign * (x - xRef));
     if (radius[k] > maxR) maxR = radius[k];
   }
   const rimR = radius[samples - 1];
@@ -108,6 +120,8 @@ export function buildPotGeometry(outlineMm, heightMm, opts) {
       rimDiameterMm: rimR * 2,
       maxDiameterMm: maxR * 2,
       wallMm: wall,
+      // [height, outer radius] up the pot, for inspection.
+      profileMm: Array.from(ys, (y, k) => [y, radius[k]]),
     },
   };
 }
